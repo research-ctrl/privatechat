@@ -1,33 +1,42 @@
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useChatStore } from '@/store/useChatStore'
 import { useKeyStore } from '@/store/useKeyStore'
 import { decryptMessage } from '@/lib/crypto'
-import type { Message, DecryptedMessage, Profile, ConversationWithParticipants } from '@/types'
+import type { Message, DecryptedMessage, Profile } from '@/types'
 
 export function useMessages(conversationId: string | null) {
   const userId = useAuthStore((s) => s.userId)
-  const { messages, setMessages, addMessage, updateConversationLastMessage } = useChatStore()
-  const { getOrDeriveSharedKey } = useKeyStore()
+  const messages = useChatStore((s) => s.messages)
+  const setMessages = useChatStore((s) => s.setMessages)
+  const addMessage = useChatStore((s) => s.addMessage)
+  const updateConversationLastMessage = useChatStore((s) => s.updateConversationLastMessage)
+  const getOrDeriveSharedKey = useKeyStore((s) => s.getOrDeriveSharedKey)
+
+  // Stable ref holds latest values — updated every render, never causes effect re-runs
+  const stableRef = useRef({ userId, setMessages, addMessage, updateConversationLastMessage, getOrDeriveSharedKey })
+  stableRef.current = { userId, setMessages, addMessage, updateConversationLastMessage, getOrDeriveSharedKey }
+
   const profileCacheRef = useRef<Map<string, Profile>>(new Map())
 
-  const getProfile = useCallback(async (profileId: string): Promise<Profile | null> => {
-    const cached = profileCacheRef.current.get(profileId)
-    if (cached) return cached
+  useEffect(() => {
+    if (!conversationId) return
 
-    const { data } = await supabase.from('profiles').select('*').eq('id', profileId).single()
-    if (data) {
-      profileCacheRef.current.set(profileId, data as Profile)
-      return data as Profile
+    const getProfile = async (profileId: string): Promise<Profile | null> => {
+      const cached = profileCacheRef.current.get(profileId)
+      if (cached) return cached
+      const { data } = await supabase.from('profiles').select('*').eq('id', profileId).single()
+      if (data) {
+        profileCacheRef.current.set(profileId, data as Profile)
+        return data as Profile
+      }
+      return null
     }
-    return null
-  }, [])
 
-  const decryptOneMessage = useCallback(
-    async (msg: Message, conversation: ConversationWithParticipants | undefined): Promise<DecryptedMessage | null> => {
+    const decryptOneMessage = async (msg: Message): Promise<DecryptedMessage | null> => {
+      const { userId, getOrDeriveSharedKey } = stableRef.current
       try {
-        // If private key is not loaded, show placeholder instead of crashing
         if (!useKeyStore.getState().privateKey) {
           const sender = await getProfile(msg.sender_id)
           return {
@@ -46,7 +55,9 @@ export function useMessages(conversationId: string | null) {
         const sender = await getProfile(msg.sender_id)
         if (!sender) return null
 
-        // Determine the other party for key derivation
+        const conversations = useChatStore.getState().conversations
+        const conversation = conversations.find((c) => c.id === conversationId)
+
         const otherUserId = msg.sender_id === userId
           ? conversation?.participants.find((p) => p.id !== userId)?.id ?? msg.sender_id
           : msg.sender_id
@@ -76,40 +87,31 @@ export function useMessages(conversationId: string | null) {
         console.error('Failed to decrypt message:', err)
         return null
       }
-    },
-    [userId, getProfile, getOrDeriveSharedKey]
-  )
-
-  const fetchMessages = useCallback(async () => {
-    if (!conversationId || !userId) return
-
-    try {
-      const conversations = useChatStore.getState().conversations
-      const conversation = conversations.find((c) => c.id === conversationId)
-
-      const { data: rawMessages } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true })
-        .limit(100)
-
-      if (!rawMessages) return
-
-      const decrypted: DecryptedMessage[] = []
-      for (const msg of rawMessages) {
-        const dm = await decryptOneMessage(msg as Message, conversation)
-        if (dm) decrypted.push(dm)
-      }
-
-      setMessages(conversationId, decrypted)
-    } catch (err) {
-      console.error('fetchMessages failed:', err)
     }
-  }, [conversationId, userId, decryptOneMessage, setMessages])
 
-  useEffect(() => {
-    if (!conversationId) return
+    const fetchMessages = async () => {
+      const { userId, setMessages } = stableRef.current
+      if (!userId) return
+      try {
+        const { data: rawMessages } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: true })
+          .limit(100)
+
+        if (!rawMessages) return
+
+        const decrypted: DecryptedMessage[] = []
+        for (const msg of rawMessages) {
+          const dm = await decryptOneMessage(msg as Message)
+          if (dm) decrypted.push(dm)
+        }
+        setMessages(conversationId, decrypted)
+      } catch (err) {
+        console.error('fetchMessages failed:', err)
+      }
+    }
 
     fetchMessages()
 
@@ -124,12 +126,10 @@ export function useMessages(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         async (payload) => {
+          const { addMessage, updateConversationLastMessage } = stableRef.current
           try {
             const msg = payload.new as Message
-            // Re-read from store each time so we always have the latest conversation data
-            const conversations = useChatStore.getState().conversations
-            const conversation = conversations.find((c) => c.id === conversationId)
-            const dm = await decryptOneMessage(msg, conversation)
+            const dm = await decryptOneMessage(msg)
             if (dm) {
               addMessage(conversationId, dm)
               updateConversationLastMessage(
@@ -146,7 +146,7 @@ export function useMessages(conversationId: string | null) {
       .subscribe()
 
     return () => { void supabase.removeChannel(channel) }
-  }, [conversationId, fetchMessages, decryptOneMessage, addMessage, updateConversationLastMessage])
+  }, [conversationId]) // ← only re-runs when conversation changes
 
   return { messages: messages[conversationId ?? ''] ?? [] }
 }

@@ -16,11 +16,13 @@ interface MessageInputProps {
 export function MessageInput({ conversation }: MessageInputProps) {
   const [text, setText] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<{ file: File; url: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { userId } = useAuthStore()
   const { getOrDeriveSharedKey } = useKeyStore()
+  const hasPrivateKey = useKeyStore((s) => s.privateKey !== null)
   const { startTyping, stopTyping } = useTyping(conversation.id)
 
   const getOtherUser = useCallback(() => {
@@ -29,59 +31,69 @@ export function MessageInput({ conversation }: MessageInputProps) {
 
   const send = useCallback(async () => {
     if ((!text.trim() && !imagePreview) || isSending) return
+    if (!hasPrivateKey) {
+      setSendError('Session expired — please sign in again')
+      return
+    }
 
     const otherUser = getOtherUser()
-    if (!otherUser) return
+    if (!otherUser) {
+      setSendError('Could not find recipient')
+      return
+    }
 
     setIsSending(true)
+    setSendError(null)
     try {
       const sharedKey = await getOrDeriveSharedKey(otherUser.id, otherUser.public_key)
 
       if (imagePreview) {
-        // encryptAndUploadImage already encrypts the payload with sharedKey
-        // ciphertext = encrypted ImageMessagePayload JSON, iv = AES-GCM IV
         const { ciphertext, iv } = await encryptAndUploadImage(
           imagePreview.file,
           userId ?? '',
           sharedKey
         )
 
-        await supabase.from('messages').insert({
+        const { error } = await supabase.from('messages').insert({
           conversation_id: conversation.id,
           sender_id: userId,
           ciphertext,
           iv,
           message_type: 'image',
         })
+        if (error) throw new Error(error.message)
 
         URL.revokeObjectURL(imagePreview.url)
         setImagePreview(null)
       } else {
         const { ciphertext, iv } = await encryptMessage(text.trim(), sharedKey)
-        await supabase.from('messages').insert({
+        const { error } = await supabase.from('messages').insert({
           conversation_id: conversation.id,
           sender_id: userId,
           ciphertext,
           iv,
           message_type: 'text',
         })
+        if (error) throw new Error(error.message)
         setText('')
       }
 
-      await stopTyping()
+      void stopTyping()
 
       // Update conversation timestamp
-      await supabase
+      void supabase
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', conversation.id)
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to send'
       console.error('Failed to send message:', err)
+      setSendError(msg)
     } finally {
       setIsSending(false)
       textareaRef.current?.focus()
     }
-  }, [text, imagePreview, isSending, getOtherUser, getOrDeriveSharedKey, userId, conversation.id, stopTyping])
+  }, [text, imagePreview, isSending, hasPrivateKey, getOtherUser, getOrDeriveSharedKey, userId, conversation.id, stopTyping])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -95,7 +107,7 @@ export function MessageInput({ conversation }: MessageInputProps) {
     if (!file) return
     if (!file.type.startsWith('image/')) return
     if (file.size > 10 * 1024 * 1024) {
-      alert('Image must be under 10MB')
+      setSendError('Image must be under 10MB')
       return
     }
     const url = URL.createObjectURL(file)
@@ -110,6 +122,10 @@ export function MessageInput({ conversation }: MessageInputProps) {
 
   return (
     <div className="border-t bg-card p-3 space-y-2">
+      {sendError && (
+        <div className="text-xs text-destructive text-center">{sendError}</div>
+      )}
+
       {imagePreview && (
         <div className="relative inline-block">
           <img
@@ -151,8 +167,8 @@ export function MessageInput({ conversation }: MessageInputProps) {
           value={text}
           onChange={(e) => {
             setText(e.target.value)
+            setSendError(null)
             void startTyping()
-            // Auto resize
             e.target.style.height = 'auto'
             e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
           }}

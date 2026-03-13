@@ -13,38 +13,43 @@ export function useTyping(conversationId: string | null) {
 
   const startTyping = useCallback(async () => {
     if (!conversationId || !userId) return
-    if (!isTyping.current) {
-      isTyping.current = true
-      await supabase.from('typing_indicators').upsert({
-        conversation_id: conversationId,
-        user_id: userId,
-        updated_at: new Date().toISOString(),
-      })
-    }
+    try {
+      if (!isTyping.current) {
+        isTyping.current = true
+        await supabase.from('typing_indicators').upsert({
+          conversation_id: conversationId,
+          user_id: userId,
+          updated_at: new Date().toISOString(),
+        })
+      }
 
-    if (typingTimer.current) clearTimeout(typingTimer.current)
-    typingTimer.current = setTimeout(async () => {
+      if (typingTimer.current) clearTimeout(typingTimer.current)
+      typingTimer.current = setTimeout(async () => {
+        isTyping.current = false
+        try {
+          await supabase
+            .from('typing_indicators')
+            .delete()
+            .eq('conversation_id', conversationId)
+            .eq('user_id', userId)
+        } catch { /* ignore cleanup errors */ }
+      }, TYPING_TIMEOUT)
+    } catch { /* ignore typing indicator errors — non-critical */ }
+  }, [conversationId, userId])
+
+  const stopTyping = useCallback(async () => {
+    if (!conversationId || !userId) return
+    try {
+      if (typingTimer.current) clearTimeout(typingTimer.current)
       isTyping.current = false
       await supabase
         .from('typing_indicators')
         .delete()
         .eq('conversation_id', conversationId)
         .eq('user_id', userId)
-    }, TYPING_TIMEOUT)
+    } catch { /* ignore cleanup errors */ }
   }, [conversationId, userId])
 
-  const stopTyping = useCallback(async () => {
-    if (!conversationId || !userId) return
-    if (typingTimer.current) clearTimeout(typingTimer.current)
-    isTyping.current = false
-    await supabase
-      .from('typing_indicators')
-      .delete()
-      .eq('conversation_id', conversationId)
-      .eq('user_id', userId)
-  }, [conversationId, userId])
-
-  // Subscribe to typing changes in this conversation
   useEffect(() => {
     if (!conversationId || !userId) return
 
@@ -59,13 +64,15 @@ export function useTyping(conversationId: string | null) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         async () => {
-          const { data } = await supabase
-            .from('typing_indicators')
-            .select('user_id')
-            .eq('conversation_id', conversationId)
-            .neq('user_id', userId)
+          try {
+            const { data } = await supabase
+              .from('typing_indicators')
+              .select('user_id')
+              .eq('conversation_id', conversationId)
+              .neq('user_id', userId)
 
-          setTypingUsers(conversationId, (data ?? []).map((r) => r.user_id))
+            setTypingUsers(conversationId, (data ?? []).map((r) => r.user_id))
+          } catch { /* ignore */ }
         }
       )
       .subscribe()

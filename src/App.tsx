@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { AuthPage } from '@/pages/AuthPage'
 import { ChatPage } from '@/pages/ChatPage'
 import { AuthGuard } from '@/components/auth/AuthGuard'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Toaster } from '@/components/ui/toaster'
 import { useAuthStore } from '@/store/useAuthStore'
 
@@ -13,12 +14,12 @@ function App() {
   }, [initialize])
 
   return (
-    <>
+    <ErrorBoundary>
       <AuthGuard fallback={<AuthPage />}>
         <ChatPage />
       </AuthGuard>
       <Toaster />
-    </>
+    </ErrorBoundary>
   )
 }
 

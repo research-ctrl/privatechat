@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { EmptyState } from './EmptyState'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useChatStore } from '@/store/useChatStore'
 
 export function AppLayout() {
@@ -43,7 +44,9 @@ export function AppLayout() {
                 ← Back
               </button>
             </div>
-            <ChatWindow conversation={activeConversation} />
+            <ErrorBoundary>
+              <ChatWindow conversation={activeConversation} />
+            </ErrorBoundary>
           </>
         ) : (
           <EmptyState />

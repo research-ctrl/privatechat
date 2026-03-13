@@ -9,7 +9,7 @@ import { LogOut, Shield } from 'lucide-react'
 
 export function Sidebar() {
   const { profile, signOut } = useAuthStore()
-  const { conversations } = useConversations()
+  const { conversations, refetch } = useConversations()
 
   return (
     <div className="flex flex-col h-full border-r bg-card">
@@ -39,7 +39,7 @@ export function Sidebar() {
 
       {/* Search */}
       <div className="p-3 border-b">
-        <UserSearch />
+        <UserSearch refetch={refetch} />
       </div>
 
       {/* Conversations */}

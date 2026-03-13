@@ -27,7 +27,19 @@ interface AuthStore {
   clearError: () => void
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
+// Extracted cleanup — used by both signOut() and the onAuthStateChange listener
+// to avoid recursive calls (signOut fires SIGNED_OUT which would call signOut again)
+let _cleanup: (() => void) | null = null
+
+export const useAuthStore = create<AuthStore>((set) => {
+  _cleanup = () => {
+    useKeyStore.getState().clearKeys()
+    useChatStore.getState().reset()
+    clearSessionKeys()
+    set({ userId: null, profile: null, error: null })
+  }
+
+  return {
   userId: null,
   profile: null,
   isLoading: false,
@@ -44,12 +56,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
       return
     }
 
-    // Try to restore private key from sessionStorage
+    // If session exists but sessionStorage has no saved key, the user closed the tab
+    // and re-opened it. We can't decrypt messages without the password, so force re-login.
     const savedKeys = getEncryptedKeyFromSession()
-    if (savedKeys) {
-      // We need to re-derive the key but we don't have the password
-      // We stored it in session, so we can re-load it next sign-in
-      // For now, just set userId and load profile — key will be re-derived on next action
+    if (!savedKeys) {
+      await supabase.auth.signOut()
+      _cleanup?.()
+      set({ isInitialized: true })
+      return
     }
 
     const { data: profile } = await supabase
@@ -170,16 +184,16 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   signOut: async () => {
     await supabase.auth.signOut()
-    useKeyStore.getState().clearKeys()
-    useChatStore.getState().reset()
-    clearSessionKeys()
-    set({ userId: null, profile: null, error: null })
+    _cleanup?.()
   },
-}))
+}
+})
 
-// Keep auth state in sync with Supabase session changes
+// Keep auth state in sync with Supabase session changes (token expiry, etc.)
+// Must NOT call signOut() here — that would create an infinite loop since
+// signOut() calls supabase.auth.signOut() which re-fires this SIGNED_OUT event.
 supabase.auth.onAuthStateChange((event) => {
   if (event === 'SIGNED_OUT') {
-    useAuthStore.getState().signOut()
+    _cleanup?.()
   }
 })

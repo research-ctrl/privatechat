@@ -8,7 +8,11 @@ import { supabase } from '@/lib/supabase'
 import { getInitials } from '@/lib/utils'
 import type { Profile } from '@/types'
 
-export function UserSearch() {
+interface UserSearchProps {
+  refetch: () => Promise<void>
+}
+
+export function UserSearch({ refetch }: UserSearchProps) {
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const { results, isSearching, search, clear } = useUserSearch()
@@ -33,12 +37,13 @@ export function UserSearch() {
         other_user_id: user.id,
       })
       if (error) throw error
+      await refetch()
       setActiveConversation(data as string)
       handleClose()
     } catch (err) {
       console.error('Failed to open conversation:', err)
     }
-  }, [setActiveConversation])
+  }, [refetch, setActiveConversation])
 
   if (!isOpen) {
     return (

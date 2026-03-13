@@ -8,7 +8,8 @@ interface ConversationItemProps {
 }
 
 export function ConversationItem({ conversation }: ConversationItemProps) {
-  const { activeConversationId, setActiveConversation } = useChatStore()
+  const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const isActive = activeConversationId === conversation.id
   const { otherUser } = conversation
 

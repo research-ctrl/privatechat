@@ -20,8 +20,8 @@ export function MessageInput({ conversation }: MessageInputProps) {
   const [imagePreview, setImagePreview] = useState<{ file: File; url: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { userId } = useAuthStore()
-  const { getOrDeriveSharedKey } = useKeyStore()
+  const userId = useAuthStore((s) => s.userId)
+  const getOrDeriveSharedKey = useKeyStore((s) => s.getOrDeriveSharedKey)
   const hasPrivateKey = useKeyStore((s) => s.privateKey !== null)
   const { startTyping, stopTyping } = useTyping(conversation.id)
 

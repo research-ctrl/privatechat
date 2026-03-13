@@ -6,7 +6,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useChatStore } from '@/store/useChatStore'
 
 export function AppLayout() {
-  const { activeConversationId, conversations } = useChatStore()
+  const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const conversations = useChatStore((s) => s.conversations)
   const [mobileChatOpen, setMobileChatOpen] = useState(false)
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId)

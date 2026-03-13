@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { cn, formatMessageTime } from '@/lib/utils'
 import { ImageMessage } from './ImageMessage'
 import type { DecryptedMessage } from '@/types'
@@ -7,7 +8,7 @@ interface MessageBubbleProps {
   showAvatar?: boolean
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProps) {
   const isOwn = message.isOwn ?? false
 
   return (
@@ -39,4 +40,4 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       </div>
     </div>
   )
-}
+})

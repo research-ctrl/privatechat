@@ -7,7 +7,7 @@ const TYPING_TIMEOUT = 3000
 
 export function useTyping(conversationId: string | null) {
   const userId = useAuthStore((s) => s.userId)
-  const { setTypingUsers } = useChatStore()
+  const setTypingUsers = useChatStore((s) => s.setTypingUsers)
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isTyping = useRef(false)
 

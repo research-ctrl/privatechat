@@ -20,30 +20,35 @@ export function ImageMessage({ message }: ImageMessageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
-  const { getOrDeriveSharedKey } = useKeyStore()
+  // Selector — only re-renders when privateKey changes, not when sharedKeys Map updates
+  const getOrDeriveSharedKey = useKeyStore((s) => s.getOrDeriveSharedKey)
   const userId = useAuthStore((s) => s.userId)
+
+  // Destructure stable primitives so the effect doesn't re-run when the parent
+  // creates a new message object with the same data (e.g. after setMessages is called)
+  const { id: msgId, content: msgContent, isOwn, conversation_id: convId, sender_id: senderId } = message
 
   useEffect(() => {
     let objectUrl: string | null = null
+    let cancelled = false
 
     const load = async () => {
       try {
-        // message.content for image type = "ciphertext|||iv"
-        const parts = message.content.split('|||')
+        const parts = msgContent.split('|||')
         if (parts.length !== 2) throw new Error('Invalid image message format')
         const [ciphertext, iv] = parts
 
         let otherUserId: string
-        if (message.isOwn) {
+        if (isOwn) {
           const { data: participants } = await supabase
             .from('conversation_participants')
             .select('user_id')
-            .eq('conversation_id', message.conversation_id)
+            .eq('conversation_id', convId)
             .neq('user_id', userId ?? '')
           if (!participants?.[0]) throw new Error('No recipient found')
           otherUserId = participants[0].user_id
         } else {
-          otherUserId = message.sender_id
+          otherUserId = senderId
         }
 
         const { data: profile } = await supabase
@@ -56,20 +61,21 @@ export function ImageMessage({ message }: ImageMessageProps) {
 
         const sharedKey = await getOrDeriveSharedKey(profile.id, profile.public_key)
         objectUrl = await downloadAndDecryptImage(ciphertext, iv, sharedKey)
-        setImageUrl(objectUrl)
+        if (!cancelled) setImageUrl(objectUrl)
       } catch {
-        setHasError(true)
+        if (!cancelled) setHasError(true)
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
 
     load()
 
     return () => {
+      cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [message, userId, getOrDeriveSharedKey])
+  }, [msgId, msgContent, isOwn, convId, senderId, userId, getOrDeriveSharedKey])
 
   if (isLoading) {
     return (

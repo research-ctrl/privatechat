@@ -6,7 +6,8 @@ import type { ConversationWithParticipants, Profile } from '@/types'
 
 export function useConversations() {
   const userId = useAuthStore((s) => s.userId)
-  const { conversations, setConversations } = useChatStore()
+  const conversations = useChatStore((s) => s.conversations)
+  const setConversations = useChatStore((s) => s.setConversations)
 
   const fetchConversations = useCallback(async () => {
     if (!userId) return

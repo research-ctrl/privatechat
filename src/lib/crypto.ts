@@ -105,29 +105,37 @@ async function deriveWrappingKey(password: string, salt: Uint8Array): Promise<Cr
 }
 
 // ─── Session Key Storage (sessionStorage for refresh persistence) ─────────────
+// Store the private key JWK directly in sessionStorage so it survives page
+// refreshes within the same tab.  sessionStorage is cleared on tab close,
+// so the key is not persisted across browser sessions.
 
-const SESSION_KEY_ID = 'privatechat-wrapping-key-salt'
-const SESSION_IV_ID = 'privatechat-wrapping-key-iv'
-const SESSION_ENC_KEY = 'privatechat-encrypted-pkey'
+const SESSION_PRIVATE_KEY = 'privatechat-session-pkey'
 
-export function saveEncryptedKeyToSession(encryptedKey: string, salt: string, iv: string) {
-  sessionStorage.setItem(SESSION_ENC_KEY, encryptedKey)
-  sessionStorage.setItem(SESSION_KEY_ID, salt)
-  sessionStorage.setItem(SESSION_IV_ID, iv)
+export async function savePrivateKeyToSession(privateKey: CryptoKey): Promise<void> {
+  const jwk = await crypto.subtle.exportKey('jwk', privateKey)
+  sessionStorage.setItem(SESSION_PRIVATE_KEY, JSON.stringify(jwk))
 }
 
-export function getEncryptedKeyFromSession(): { encryptedKey: string; salt: string; iv: string } | null {
-  const encryptedKey = sessionStorage.getItem(SESSION_ENC_KEY)
-  const salt = sessionStorage.getItem(SESSION_KEY_ID)
-  const iv = sessionStorage.getItem(SESSION_IV_ID)
-  if (!encryptedKey || !salt || !iv) return null
-  return { encryptedKey, salt, iv }
+export async function getPrivateKeyFromSession(): Promise<CryptoKey | null> {
+  const jwkStr = sessionStorage.getItem(SESSION_PRIVATE_KEY)
+  if (!jwkStr) return null
+  try {
+    const jwk = JSON.parse(jwkStr) as JsonWebKey
+    return await crypto.subtle.importKey(
+      'jwk',
+      jwk,
+      { name: 'ECDH', namedCurve: 'P-256' },
+      true,
+      ['deriveKey', 'deriveBits']
+    )
+  } catch {
+    sessionStorage.removeItem(SESSION_PRIVATE_KEY)
+    return null
+  }
 }
 
 export function clearSessionKeys() {
-  sessionStorage.removeItem(SESSION_ENC_KEY)
-  sessionStorage.removeItem(SESSION_KEY_ID)
-  sessionStorage.removeItem(SESSION_IV_ID)
+  sessionStorage.removeItem(SESSION_PRIVATE_KEY)
 }
 
 // ─── ECDH Shared Key Derivation ───────────────────────────────────────────────

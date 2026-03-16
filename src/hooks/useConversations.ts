@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useChatStore } from '@/store/useChatStore'
@@ -7,32 +7,32 @@ import type { ConversationWithParticipants, Profile } from '@/types'
 export function useConversations() {
   const userId = useAuthStore((s) => s.userId)
   const conversations = useChatStore((s) => s.conversations)
-  const setConversations = useChatStore((s) => s.setConversations)
+  const userIdRef = useRef(userId)
+  userIdRef.current = userId
 
   const fetchConversations = useCallback(async () => {
-    if (!userId) return
+    const currentUserId = userIdRef.current
+    if (!currentUserId) return
 
     try {
-      // Get all conversation IDs the user is in
       const { data: participantRows, error: participantError } = await supabase
         .from('conversation_participants')
         .select('conversation_id')
-        .eq('user_id', userId)
+        .eq('user_id', currentUserId)
 
       if (participantError) {
         console.error('Failed to fetch conversation participants:', participantError)
-        setConversations([])
+        useChatStore.getState().setConversations([])
         return
       }
 
       if (!participantRows || participantRows.length === 0) {
-        setConversations([])
+        useChatStore.getState().setConversations([])
         return
       }
 
       const convIds = participantRows.map((r) => r.conversation_id)
 
-      // Get full conversation data
       const { data: convData, error: convError } = await supabase
         .from('conversations')
         .select('*')
@@ -45,11 +45,10 @@ export function useConversations() {
       }
 
       if (!convData) {
-        setConversations([])
+        useChatStore.getState().setConversations([])
         return
       }
 
-      // Get all participants for these conversations
       const { data: allParticipants, error: allParticipantsError } = await supabase
         .from('conversation_participants')
         .select('conversation_id, user_id')
@@ -61,11 +60,10 @@ export function useConversations() {
       }
 
       if (!allParticipants) {
-        setConversations([])
+        useChatStore.getState().setConversations([])
         return
       }
 
-      // Get profiles for all participants
       const allUserIds = [...new Set(allParticipants.map((p) => p.user_id))]
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
@@ -78,7 +76,7 @@ export function useConversations() {
       }
 
       if (!profiles) {
-        setConversations([])
+        useChatStore.getState().setConversations([])
         return
       }
 
@@ -90,7 +88,7 @@ export function useConversations() {
           .map((p) => profileMap.get(p.user_id))
           .filter(Boolean) as Profile[]
 
-        const otherUser = convParticipants.find((p) => p.id !== userId) ?? convParticipants[0]
+        const otherUser = convParticipants.find((p) => p.id !== currentUserId) ?? convParticipants[0]
 
         return {
           ...conv,
@@ -101,19 +99,18 @@ export function useConversations() {
         } as ConversationWithParticipants
       })
 
-      setConversations(enriched)
+      useChatStore.getState().setConversations(enriched)
     } catch (err) {
       console.error('useConversations error:', err)
-      setConversations([])
+      useChatStore.getState().setConversations([])
     }
-  }, [userId, setConversations])
+  }, []) // No deps — reads userId from ref, store actions via getState()
 
   useEffect(() => {
-    fetchConversations()
-
     if (!userId) return
 
-    // Subscribe to new participants (someone starts a chat with you)
+    fetchConversations()
+
     const channel = supabase
       .channel(`conversations:${userId}`)
       .on(

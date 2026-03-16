@@ -5,8 +5,8 @@ import {
   exportPublicKeyAsJWK,
   encryptPrivateKey,
   decryptPrivateKey,
-  saveEncryptedKeyToSession,
-  getEncryptedKeyFromSession,
+  savePrivateKeyToSession,
+  getPrivateKeyFromSession,
   clearSessionKeys,
 } from '@/lib/crypto'
 import { useKeyStore } from './useKeyStore'
@@ -56,15 +56,17 @@ export const useAuthStore = create<AuthStore>((set) => {
       return
     }
 
-    // If session exists but sessionStorage has no saved key, the user closed the tab
-    // and re-opened it. We can't decrypt messages without the password, so force re-login.
-    const savedKeys = getEncryptedKeyFromSession()
-    if (!savedKeys) {
+    // Try to restore the private key from sessionStorage (survives page refresh).
+    // If sessionStorage was cleared (tab close), force re-login.
+    const privateKey = await getPrivateKeyFromSession()
+    if (!privateKey) {
       await supabase.auth.signOut()
       _cleanup?.()
       set({ isInitialized: true })
       return
     }
+
+    useKeyStore.getState().setPrivateKey(privateKey)
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -113,9 +115,9 @@ export const useAuthStore = create<AuthStore>((set) => {
 
       if (keyError) throw new Error(`Failed to store key: ${keyError.message}`)
 
-      // Cache private key in memory
+      // Cache private key in memory + sessionStorage
       useKeyStore.getState().setPrivateKey(keyPair.privateKey)
-      saveEncryptedKeyToSession(encryptedKey, salt, iv)
+      await savePrivateKeyToSession(keyPair.privateKey)
 
       // Load profile
       const { data: profile } = await supabase
@@ -161,7 +163,7 @@ export const useAuthStore = create<AuthStore>((set) => {
       )
 
       useKeyStore.getState().setPrivateKey(privateKey)
-      saveEncryptedKeyToSession(keyData.encrypted_private_key, keyData.key_salt, keyData.key_iv)
+      await savePrivateKeyToSession(privateKey)
 
       // Load profile
       const { data: profile } = await supabase

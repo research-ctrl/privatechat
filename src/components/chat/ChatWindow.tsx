@@ -4,14 +4,15 @@ import { MessageInput } from './MessageInput'
 import { useMessages } from '@/hooks/useMessages'
 import { useKeyStore } from '@/store/useKeyStore'
 import { getInitials } from '@/lib/utils'
-import { Shield, Lock } from 'lucide-react'
+import { Shield, Lock, ArrowLeft } from 'lucide-react'
 import type { ConversationWithParticipants } from '@/types'
 
 interface ChatWindowProps {
   conversation: ConversationWithParticipants
+  onBack?: () => void
 }
 
-export function ChatWindow({ conversation }: ChatWindowProps) {
+export function ChatWindow({ conversation, onBack }: ChatWindowProps) {
   const { messages } = useMessages(conversation.id)
   const hasPrivateKey = useKeyStore((s) => s.privateKey !== null)
   const { otherUser } = conversation
@@ -20,6 +21,14 @@ export function ChatWindow({ conversation }: ChatWindowProps) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b bg-card">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="md:hidden p-1 -ml-1 rounded-md hover:bg-muted text-muted-foreground"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+        )}
         <Avatar className="h-9 w-9">
           {otherUser?.avatar_url && (
             <img src={otherUser.avatar_url} alt={otherUser.username} className="aspect-square object-cover" />

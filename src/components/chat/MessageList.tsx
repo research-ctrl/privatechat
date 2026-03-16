@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { MessageBubble } from './MessageBubble'
 import { TypingIndicator } from './TypingIndicator'
@@ -11,11 +11,13 @@ interface MessageListProps {
   messages: DecryptedMessage[]
 }
 
+const EMPTY_TYPING: string[] = []
+
 export function MessageList({ conversationId, messages }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
-  const typingUsers = useChatStore((s) => s.typingUsers[conversationId] ?? [])
+  const typingUsers = useChatStore((s) => s.typingUsers[conversationId]) ?? EMPTY_TYPING
   const userId = useAuthStore((s) => s.userId)
-  const isTyping = typingUsers.filter((id) => id !== userId).length > 0
+  const isTyping = useMemo(() => typingUsers.some((id) => id !== userId), [typingUsers, userId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })

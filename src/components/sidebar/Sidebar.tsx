@@ -8,7 +8,8 @@ import { getInitials } from '@/lib/utils'
 import { LogOut, Shield } from 'lucide-react'
 
 export function Sidebar() {
-  const { profile, signOut } = useAuthStore()
+  const profile = useAuthStore((s) => s.profile)
+  const signOut = useAuthStore((s) => s.signOut)
   const { conversations, refetch } = useConversations()
 
   return (

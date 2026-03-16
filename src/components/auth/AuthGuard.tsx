@@ -7,7 +7,8 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, fallback }: AuthGuardProps) {
-  const { userId, isInitialized } = useAuthStore()
+  const userId = useAuthStore((s) => s.userId)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
 
   if (!isInitialized) {
     return (

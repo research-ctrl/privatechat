@@ -1,20 +1,30 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { EmptyState } from './EmptyState'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useChatStore } from '@/store/useChatStore'
 
+
 export function AppLayout() {
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const conversations = useChatStore((s) => s.conversations)
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const [mobileChatOpen, setMobileChatOpen] = useState(false)
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId)
 
-  const handleSelectConversation = () => {
-    setMobileChatOpen(true)
-  }
+  // Open chat view on mobile when a conversation is selected
+  useEffect(() => {
+    if (activeConversationId) {
+      setMobileChatOpen(true)
+    }
+  }, [activeConversationId])
+
+  const handleBack = useCallback(() => {
+    setMobileChatOpen(false)
+    setActiveConversation(null)
+  }, [setActiveConversation])
 
   return (
     <div className="flex h-full">
@@ -24,7 +34,6 @@ export function AppLayout() {
           w-full md:w-80 lg:w-96 flex-shrink-0 h-full
           ${mobileChatOpen && activeConversation ? 'hidden md:flex md:flex-col' : 'flex flex-col'}
         `}
-        onClick={handleSelectConversation}
       >
         <Sidebar />
       </div>
@@ -35,20 +44,9 @@ export function AppLayout() {
         ${!mobileChatOpen || !activeConversation ? 'hidden md:flex md:flex-col' : 'flex flex-col'}
       `}>
         {activeConversation ? (
-          <>
-            {/* Mobile back button */}
-            <div className="md:hidden absolute top-3 left-3 z-10">
-              <button
-                onClick={() => setMobileChatOpen(false)}
-                className="text-xs bg-background border rounded-md px-2 py-1 text-muted-foreground hover:text-foreground"
-              >
-                ← Back
-              </button>
-            </div>
-            <ErrorBoundary>
-              <ChatWindow conversation={activeConversation} />
-            </ErrorBoundary>
-          </>
+          <ErrorBoundary>
+            <ChatWindow conversation={activeConversation} onBack={handleBack} />
+          </ErrorBoundary>
         ) : (
           <EmptyState />
         )}

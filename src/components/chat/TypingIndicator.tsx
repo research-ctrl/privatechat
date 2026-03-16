@@ -1,11 +1,20 @@
 export function TypingIndicator() {
   return (
-    <div className="flex justify-start">
-      <div className="bg-card border rounded-2xl rounded-bl-sm px-3 py-2">
+    <div className="flex justify-start mt-1">
+      <div className="bg-[hsl(var(--bubble-in))] text-[hsl(var(--bubble-in-fg))] rounded-2xl rounded-bl-sm px-4 py-2.5 shadow-sm">
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:-0.3s]" />
-          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:-0.15s]" />
-          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" />
+          <span
+            className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce"
+            style={{ animationDelay: '0ms' }}
+          />
+          <span
+            className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce"
+            style={{ animationDelay: '150ms' }}
+          />
+          <span
+            className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce"
+            style={{ animationDelay: '300ms' }}
+          />
         </div>
       </div>
     </div>

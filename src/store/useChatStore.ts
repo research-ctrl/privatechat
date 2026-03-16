@@ -5,7 +5,8 @@ interface ChatStore {
   conversations: ConversationWithParticipants[]
   activeConversationId: string | null
   messages: Record<string, DecryptedMessage[]>
-  typingUsers: Record<string, string[]> // conversationId -> userIds typing
+  typingUsers: Record<string, string[]>
+  unreadCounts: Record<string, number>
 
   setConversations: (conversations: ConversationWithParticipants[]) => void
   setActiveConversation: (id: string | null) => void
@@ -13,6 +14,8 @@ interface ChatStore {
   setMessages: (conversationId: string, messages: DecryptedMessage[]) => void
   setTypingUsers: (conversationId: string, userIds: string[]) => void
   updateConversationLastMessage: (conversationId: string, preview: string, at: string) => void
+  incrementUnread: (conversationId: string) => void
+  clearUnread: (conversationId: string) => void
   reset: () => void
 }
 
@@ -21,15 +24,23 @@ export const useChatStore = create<ChatStore>((set) => ({
   activeConversationId: null,
   messages: {},
   typingUsers: {},
+  unreadCounts: {},
 
   setConversations: (conversations) => set({ conversations }),
 
-  setActiveConversation: (id) => set({ activeConversationId: id }),
+  setActiveConversation: (id) =>
+    set((state) => ({
+      activeConversationId: id,
+      // Clear unread immediately when activating a conversation
+      unreadCounts: id
+        ? { ...state.unreadCounts, [id]: 0 }
+        : state.unreadCounts,
+    })),
 
   addMessage: (conversationId, message) =>
     set((state) => {
       const existing = state.messages[conversationId] ?? []
-      // Avoid duplicates
+      // Deduplicate by ID
       if (existing.some((m) => m.id === message.id)) return state
       return {
         messages: {
@@ -49,6 +60,7 @@ export const useChatStore = create<ChatStore>((set) => ({
       typingUsers: { ...state.typingUsers, [conversationId]: userIds },
     })),
 
+  // Updates sidebar preview text + timestamp. Sorting is done in ConversationList with useMemo.
   updateConversationLastMessage: (conversationId, preview, at) =>
     set((state) => ({
       conversations: state.conversations.map((c) =>
@@ -58,5 +70,29 @@ export const useChatStore = create<ChatStore>((set) => ({
       ),
     })),
 
-  reset: () => set({ conversations: [], activeConversationId: null, messages: {}, typingUsers: {} }),
+  incrementUnread: (conversationId) =>
+    set((state) => {
+      // Never count unread for the currently visible conversation
+      if (state.activeConversationId === conversationId) return state
+      return {
+        unreadCounts: {
+          ...state.unreadCounts,
+          [conversationId]: (state.unreadCounts[conversationId] ?? 0) + 1,
+        },
+      }
+    }),
+
+  clearUnread: (conversationId) =>
+    set((state) => ({
+      unreadCounts: { ...state.unreadCounts, [conversationId]: 0 },
+    })),
+
+  reset: () =>
+    set({
+      conversations: [],
+      activeConversationId: null,
+      messages: {},
+      typingUsers: {},
+      unreadCounts: {},
+    }),
 }))
